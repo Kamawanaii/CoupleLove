@@ -1,0 +1,14 @@
+{
+  "name": "telegram-couple-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private Telegram Mini App for a couple",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
