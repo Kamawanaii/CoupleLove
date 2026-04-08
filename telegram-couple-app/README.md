@@ -27,6 +27,17 @@ npm run dev
 
 4. Откройте `http://localhost:3001`
 
+## Деплой на Railway
+
+- В Railway создайте новый проект из репозитория.
+- Railway сам поставит зависимости и запустит `npm start`.
+- В Variables добавьте минимум:
+  - `PUBLIC_APP_URL` = публичный HTTPS URL сервиса в Railway
+  - `TELEGRAM_BOT_TOKEN`
+  - `TELEGRAM_BOT_USERNAME`
+- Если хотите, чтобы этот же сервер отвечал на `/start`, добавьте `ENABLE_BOT_POLLING=true`.
+- Важно: данные хранятся в файле `data/storage.json`. Чтобы они не терялись после рестарта/редеплоя, подключите Persistent Volume и примонтируйте его к папке `data/`.
+
 ## Что понадобится позже
 
 - токен нового Telegram-бота
