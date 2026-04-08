@@ -48,5 +48,5 @@ export const config = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
   telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || '',
   enableBotPolling: process.env.ENABLE_BOT_POLLING === 'true',
-  menuButtonText: process.env.MENU_BUTTON_TEXT || 'Open 291224'
+  menuButtonText: process.env.MENU_BUTTON_TEXT || 'Open'
 }

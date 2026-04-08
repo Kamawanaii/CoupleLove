@@ -172,7 +172,7 @@ function renderAuth() {
       <section class="hero-grid">
         <section class="card hero-card">
           <div class="eyebrow">Private Mini App</div>
-          <h1>291224</h1>
+          <h1>Для двоих</h1>
           <p class="lede">Пространство только для двоих: ежедневные вопросы, совпадения, общая карта воспоминаний и месячные итоги.</p>
           <div class="hero-pills">
             <span class="pill">${inTelegram ? 'Telegram готов' : 'Локальный режим'}</span>
@@ -215,7 +215,7 @@ function renderCodeGate() {
         <section class="card hero-card">
           <div class="eyebrow">Доступ</div>
           <h1>Только для вас двоих</h1>
-          <p class="lede">Код 291224 вводится один раз для Telegram-профиля. После подтверждения вход больше его не требует. После двух привязок другие пользователи не смогут войти.</p>
+          <p class="lede">Код доступа вводится один раз для Telegram-профиля. После подтверждения вход больше его не требует. После двух привязок другие пользователи не смогут войти.</p>
         </section>
         <section class="card">
           <div class="eyebrow">Введите код</div>
@@ -223,7 +223,7 @@ function renderCodeGate() {
           <form id="access-form" class="stack-form">
             <label class="field">
               <span>Код доступа</span>
-              <input id="accessCode" name="accessCode" maxlength="12" value="${escapeHtml(state.accessCode)}" placeholder="291224" />
+              <input id="accessCode" name="accessCode" maxlength="40" value="${escapeHtml(state.accessCode)}" placeholder="Введите код" />
             </label>
             <button class="button button-primary" type="submit">Открыть приложение</button>
           </form>
@@ -241,7 +241,7 @@ function renderHeader() {
     <section class="topbar">
       <section class="card hero-card">
         <div class="eyebrow">Для двоих</div>
-        <h1>291224</h1>
+        <h1>${escapeHtml(state.data?.app?.name || 'Для двоих')}</h1>
         <p class="lede">Каждые 24 часа здесь появляется новый случайный вопрос про ваши отношения. Пропущенные дни можно открывать за искры, а память о ваших местах и историях складывается в общую карту.</p>
         <div class="hero-pills">
           <span class="pill">Искры: ${state.data?.wallet?.balance ?? 0}</span>

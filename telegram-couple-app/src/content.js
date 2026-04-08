@@ -1,7 +1,7 @@
 export const APP_CONFIG = {
-  appName: '291224',
-  subtitle: 'Личное mini app для двоих',
-  accessCode: '291224',
+  appName: process.env.APP_NAME || 'Для двоих',
+  subtitle: process.env.APP_SUBTITLE || 'Личное mini app для двоих',
+  accessCode: process.env.ACCESS_CODE || '291224',
   maxUsers: 2,
   rewindCost: 12,
   memoryReward: 6,
