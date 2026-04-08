@@ -1,7 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "cd telegram-couple-app && npm install"
 
 [deploy]
-startCommand = "cd telegram-couple-app && npm start"
+startCommand = "npm start"
 

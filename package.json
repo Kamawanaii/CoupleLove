@@ -1,0 +1,14 @@
+{
+  "name": "couplelove",
+  "private": true,
+  "type": "module",
+  "description": "Railway entrypoint for telegram-couple-app",
+  "scripts": {
+    "start": "node telegram-couple-app/src/server.js",
+    "dev": "node --watch telegram-couple-app/src/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
