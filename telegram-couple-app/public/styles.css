@@ -413,6 +413,40 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.big-code {
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  padding: 14px 16px;
+  margin-top: 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(216, 79, 139, 0.14);
+  text-align: center;
+}
+
+.shop-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.shop-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-strong);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.shop-actions {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
 .stat-grid > div {
   padding: 14px;
 }

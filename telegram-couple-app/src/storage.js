@@ -10,13 +10,18 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 function baseData() {
   return {
-    access: {
-      approvedUsers: {}
-    },
+    users: {},
+    codes: {},
+    couples: {},
     wallets: {},
     dailyAnswers: {},
     matchAnswers: {},
     memories: [],
+    purchases: [],
+    rewards: {
+      daily: {},
+      match: {}
+    },
     meta: {
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -39,19 +44,58 @@ function readData() {
 
   try {
     const parsed = JSON.parse(fs.readFileSync(dataFile, 'utf8'))
-    return {
+    const merged = {
       ...baseData(),
       ...parsed,
-      access: {
-        ...baseData().access,
-        ...(parsed.access || {}),
-        approvedUsers: parsed.access?.approvedUsers || {}
-      },
+      users: parsed.users || {},
+      codes: parsed.codes || {},
+      couples: parsed.couples || {},
       wallets: parsed.wallets || {},
       dailyAnswers: parsed.dailyAnswers || {},
       matchAnswers: parsed.matchAnswers || {},
-      memories: Array.isArray(parsed.memories) ? parsed.memories : []
+      memories: Array.isArray(parsed.memories) ? parsed.memories : [],
+      purchases: Array.isArray(parsed.purchases) ? parsed.purchases : [],
+      rewards: {
+        ...baseData().rewards,
+        ...(parsed.rewards || {}),
+        daily: parsed.rewards?.daily || {},
+        match: parsed.rewards?.match || {}
+      }
     }
+
+    // One-time migration from legacy single-household model.
+    if (!Object.keys(merged.users).length && parsed.access?.approvedUsers) {
+      const legacyUsers = parsed.access.approvedUsers || {}
+      for (const [id, legacy] of Object.entries(legacyUsers)) {
+        merged.users[id] = {
+          id,
+          name: legacy.name,
+          username: legacy.username || '',
+          avatarUrl: legacy.avatarUrl || '',
+          createdAt: legacy.approvedAt || Date.now(),
+          approvedDateKey: legacy.approvedDateKey || getCurrentDateKey(),
+          code: ''
+        }
+      }
+      const ids = Object.keys(merged.users)
+      if (ids.length === 2) {
+        const coupleId = crypto.randomUUID()
+        merged.couples[coupleId] = { id: coupleId, userIds: ids, createdAt: Date.now() }
+        for (const id of ids) {
+          merged.users[id].coupleId = coupleId
+        }
+      }
+    }
+
+    // Ensure codes for all users.
+    for (const user of Object.values(merged.users)) {
+      if (!user.code || merged.codes[user.code] !== user.id) {
+        user.code = generateUserCode(merged)
+        merged.codes[user.code] = user.id
+      }
+    }
+
+    return merged
   } catch {
     return baseData()
   }
@@ -155,6 +199,64 @@ function addTransaction(data, userId, amount, type, description) {
   wallet.transactions = wallet.transactions.slice(0, 80)
 }
 
+function generateUserCode(data) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    let code = ''
+    for (let i = 0; i < 6; i += 1) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)]
+    }
+    if (!data.codes[code]) {
+      return code
+    }
+  }
+  return crypto.randomUUID().slice(0, 8).toUpperCase()
+}
+
+function ensureUser(data, user) {
+  if (!data.users[user.id]) {
+    const code = generateUserCode(data)
+    data.users[user.id] = {
+      id: user.id,
+      name: user.name,
+      username: user.username || '',
+      avatarUrl: user.avatarUrl || '',
+      createdAt: Date.now(),
+      approvedDateKey: getCurrentDateKey(),
+      code,
+      coupleId: null
+    }
+    data.codes[code] = user.id
+  } else {
+    data.users[user.id] = {
+      ...data.users[user.id],
+      name: user.name,
+      username: user.username || '',
+      avatarUrl: user.avatarUrl || ''
+    }
+  }
+  ensureWallet(data, user.id)
+  return data.users[user.id]
+}
+
+function coupleFor(data, userId) {
+  const coupleId = data.users[userId]?.coupleId
+  if (!coupleId) return null
+  return data.couples[coupleId] || null
+}
+
+function partnerId(data, userId) {
+  const couple = coupleFor(data, userId)
+  if (!couple) return null
+  return couple.userIds.find((id) => id !== userId) || null
+}
+
+function coupleMembers(data, userId) {
+  const couple = coupleFor(data, userId)
+  if (!couple) return []
+  return couple.userIds.map((id) => data.users[id]).filter(Boolean)
+}
+
 function cleanText(value, limit = 800) {
   return String(value || '')
     .trim()
@@ -217,14 +319,6 @@ function findQuestion(questionId) {
   }
 
   return null
-}
-
-function approvedUserIds(data) {
-  return Object.keys(data.access.approvedUsers)
-}
-
-function partnerId(data, userId) {
-  return approvedUserIds(data).find((id) => id !== userId) || null
 }
 
 function weeklyProgress(data, userId, anchorDate = getCurrentDateKey()) {
@@ -323,7 +417,7 @@ function oneDailyCard(data, userId, dateKey) {
 
 function dailyFeed(data, userId) {
   const today = getCurrentDateKey()
-  const approvedFrom = data.access.approvedUsers[userId]?.approvedDateKey || today
+  const approvedFrom = data.users[userId]?.approvedDateKey || today
   const cards = []
 
   let index = 0
@@ -480,23 +574,11 @@ function monthState(data, userId) {
   }
 }
 
-function worldPins(data) {
-  return data.memories
-    .filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
-    .map((item) => ({
-      id: item.id,
-      title: item.title,
-      locationName: item.locationName,
-      latitude: item.latitude,
-      longitude: item.longitude
-    }))
-}
-
-function memberCards(data) {
-  return approvedUserIds(data).map((id) => ({
-    id,
-    name: data.access.approvedUsers[id].name,
-    avatarUrl: data.access.approvedUsers[id].avatarUrl || ''
+function memberCards(data, userId) {
+  return coupleMembers(data, userId).map((member) => ({
+    id: member.id,
+    name: member.name,
+    avatarUrl: member.avatarUrl || ''
   }))
 }
 
@@ -506,6 +588,8 @@ export function buildState(userId) {
   writeData(data)
 
   const wallet = ensureWallet(data, userId)
+  const me = data.users[userId] || null
+  const partner = partnerId(data, userId) ? data.users[partnerId(data, userId)] : null
 
   return {
     app: {
@@ -516,13 +600,24 @@ export function buildState(userId) {
       weeklyGoal: APP_CONFIG.weeklyGoal,
       weeklyReward: APP_CONFIG.weeklyReward
     },
-    me: data.access.approvedUsers[userId] || null,
-    partner: data.access.approvedUsers[partnerId(data, userId)] || null,
-    household: {
-      count: approvedUserIds(data).length,
-      maxUsers: APP_CONFIG.maxUsers,
-      members: memberCards(data)
+    me,
+    partner,
+    pairing: {
+      code: me?.code || '',
+      coupled: Boolean(me?.coupleId && partner),
+      coupleId: me?.coupleId || null
     },
+    household: me?.coupleId
+      ? {
+          count: coupleMembers(data, userId).length,
+          maxUsers: 2,
+          members: memberCards(data, userId)
+        }
+      : {
+          count: 1,
+          maxUsers: 2,
+          members: me ? [{ id: me.id, name: me.name, avatarUrl: me.avatarUrl || '' }] : []
+        },
     wallet: {
       balance: wallet.balance,
       transactions: wallet.transactions.slice(0, 8)
@@ -533,56 +628,65 @@ export function buildState(userId) {
     dailyFeed: dailyFeed(data, userId),
     match: matchState(data, userId),
     memories: data.memories.slice().sort((left, right) => right.createdAt - left.createdAt),
-    mapPins: worldPins(data),
     months: monthState(data, userId),
     generatedAt: Date.now()
   }
 }
 
-export function openSession(user, accessCode = '') {
+export function openSession(user) {
   const data = readData()
-  const known = data.access.approvedUsers[user.id]
-
-  if (!known) {
-    if (approvedUserIds(data).length >= APP_CONFIG.maxUsers) {
-      throw new Error('Это приложение уже привязано к двум пользователям.')
-    }
-
-    if (String(accessCode).trim() !== APP_CONFIG.accessCode) {
-      return {
-        ok: true,
-        requiresCode: true
-      }
-    }
-
-    data.access.approvedUsers[user.id] = {
-      id: user.id,
-      name: user.name,
-      username: user.username || '',
-      avatarUrl: user.avatarUrl || '',
-      approvedAt: Date.now(),
-      approvedDateKey: getCurrentDateKey(),
-      lastSeenAt: Date.now()
-    }
-    ensureWallet(data, user.id)
-  } else {
-    data.access.approvedUsers[user.id] = {
-      ...known,
-      name: user.name,
-      username: user.username || '',
-      avatarUrl: user.avatarUrl || '',
-      lastSeenAt: Date.now()
-    }
-  }
+  ensureUser(data, user)
 
   applyWeeklyReward(data, user.id)
   writeData(data)
 
   return {
     ok: true,
-    requiresCode: false,
     state: buildState(user.id)
   }
+}
+
+export function linkPartner(userId, partnerCode) {
+  const code = cleanText(partnerCode, 40).toUpperCase()
+  if (!code) {
+    throw new Error('Введите код партнёра.')
+  }
+
+  const data = readData()
+  const me = data.users[userId]
+  if (!me) {
+    throw new Error('Пользователь не найден.')
+  }
+  if (me.coupleId) {
+    throw new Error('Вы уже связаны с партнёром.')
+  }
+
+  const partnerUserId = data.codes[code]
+  if (!partnerUserId) {
+    throw new Error('Код не найден.')
+  }
+  if (partnerUserId === userId) {
+    throw new Error('Нельзя указать свой код.')
+  }
+  const partner = data.users[partnerUserId]
+  if (!partner) {
+    throw new Error('Партнёр не найден.')
+  }
+  if (partner.coupleId) {
+    throw new Error('Этот код уже связан с другим аккаунтом.')
+  }
+
+  const coupleId = crypto.randomUUID()
+  data.couples[coupleId] = {
+    id: coupleId,
+    userIds: [userId, partnerUserId],
+    createdAt: Date.now()
+  }
+  data.users[userId] = { ...me, coupleId }
+  data.users[partnerUserId] = { ...partner, coupleId }
+
+  writeData(data)
+  return buildState(userId)
 }
 
 export function submitDailyAnswer(userId, dateKey, answer) {
@@ -616,6 +720,26 @@ export function submitDailyAnswer(userId, dateKey, answer) {
     answeredAt: Date.now()
   }
 
+  // Earn sparks when both partners answered the same.
+  const partner = partnerId(data, userId)
+  if (partner) {
+    const theirs = data.dailyAnswers[dateKey]?.[partner]
+    const mine = data.dailyAnswers[dateKey]?.[userId]
+    const coupleId = data.users[userId]?.coupleId
+    if (theirs && mine && coupleId) {
+      const rewardKey = `${coupleId}:${dateKey}`
+      if (!data.rewards.daily[rewardKey]) {
+        const a = cleanText(mine.answer).toLowerCase()
+        const b = cleanText(theirs.answer).toLowerCase()
+        if (a && b && a === b) {
+          data.rewards.daily[rewardKey] = true
+          addTransaction(data, userId, 8, 'match', `Совпадение дня: ${dateKey}`)
+          addTransaction(data, partner, 8, 'match', `Совпадение дня: ${dateKey}`)
+        }
+      }
+    }
+  }
+
   applyWeeklyReward(data, userId)
   writeData(data)
   return buildState(userId)
@@ -647,6 +771,29 @@ export function submitMatchAnswer(userId, questionId, value) {
     answeredAt: Date.now()
   }
 
+  const partner = partnerId(data, userId)
+  if (partner) {
+    const theirs = data.matchAnswers[questionId]?.[partner]
+    const mine = data.matchAnswers[questionId]?.[userId]
+    const coupleId = data.users[userId]?.coupleId
+    if (theirs && mine && coupleId) {
+      const rewardKey = `${coupleId}:${questionId}`
+      if (!data.rewards.match[rewardKey]) {
+        const similarity =
+          resolved.question.type === 'choice'
+            ? cleanText(mine.value).toLowerCase() === cleanText(theirs.value).toLowerCase()
+              ? 100
+              : 0
+            : compareText(mine.value, theirs.value)
+        if (similarity === 100) {
+          data.rewards.match[rewardKey] = true
+          addTransaction(data, userId, 10, 'match', `Совпадение: ${resolved.topic.title}`)
+          addTransaction(data, partner, 10, 'match', `Совпадение: ${resolved.topic.title}`)
+        }
+      }
+    }
+  }
+
   writeData(data)
   return buildState(userId)
 }
@@ -661,21 +808,6 @@ export function addMemory(userId, payload) {
     throw new Error('Добавьте заголовок или текст воспоминания.')
   }
 
-  const latitude = payload.latitude === '' || payload.latitude === undefined ? null : Number(payload.latitude)
-  const longitude = payload.longitude === '' || payload.longitude === undefined ? null : Number(payload.longitude)
-
-  if ((latitude === null) !== (longitude === null)) {
-    throw new Error('Чтобы поставить пин, укажите и широту, и долготу.')
-  }
-
-  if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) {
-    throw new Error('Широта должна быть от -90 до 90.')
-  }
-
-  if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
-    throw new Error('Долгота должна быть от -180 до 180.')
-  }
-
   if (imageDataUrl.length > 1_800_000) {
     throw new Error('Фото слишком большое.')
   }
@@ -684,12 +816,10 @@ export function addMemory(userId, payload) {
   data.memories.unshift({
     id: crypto.randomUUID(),
     authorId: userId,
-    authorName: data.access.approvedUsers[userId]?.name || 'Вы',
+    authorName: data.users[userId]?.name || 'Вы',
     title,
     text,
     locationName,
-    latitude,
-    longitude,
     imageDataUrl,
     createdAt: Date.now()
   })
@@ -705,7 +835,33 @@ export function getHealth() {
   return {
     ok: true,
     appName: APP_CONFIG.appName,
-    approvedUsers: approvedUserIds(data).length,
+    users: Object.keys(data.users || {}).length,
     timeZone: APP_CONFIG.timeZone
   }
+}
+
+export function purchase(userId, item) {
+  const data = readData()
+  const wallet = ensureWallet(data, userId)
+  const title = cleanText(item?.title, 80)
+  const price = Number(item?.price || 0)
+  if (!title || !Number.isFinite(price) || price <= 0) {
+    throw new Error('Некорректная покупка.')
+  }
+  if (wallet.balance < price) {
+    throw new Error('Недостаточно искр.')
+  }
+
+  addTransaction(data, userId, -price, 'shop', title)
+  data.purchases.unshift({
+    id: crypto.randomUUID(),
+    userId,
+    coupleId: data.users[userId]?.coupleId || null,
+    title,
+    price,
+    createdAt: Date.now()
+  })
+  data.purchases = data.purchases.slice(0, 200)
+  writeData(data)
+  return buildState(userId)
 }

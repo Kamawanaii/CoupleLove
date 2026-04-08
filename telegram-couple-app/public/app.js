@@ -7,7 +7,7 @@ const state = {
   data: null,
   error: '',
   requiresCode: false,
-  accessCode: '',
+  partnerCode: '',
   devName: localStorage.getItem('couple-dev-name') || '',
   activeTab: 'today',
   activeTopicId: 'feelings',
@@ -106,14 +106,13 @@ async function postJson(url, payload) {
   })
 }
 
-async function bootstrap(accessCode = '') {
+async function bootstrap() {
   if (!state.auth) {
     return
   }
 
   const data = await postJson('/api/bootstrap', {
-    auth: state.auth,
-    accessCode
+    auth: state.auth
   })
 
   state.requiresCode = Boolean(data.requiresCode)
@@ -125,6 +124,16 @@ async function bootstrap(accessCode = '') {
     const valid = state.data.match.topics.find((topic) => topic.id === state.activeTopicId)
     state.activeTopicId = valid ? valid.id : state.data.match.topics[0].id
   }
+}
+
+async function linkPartner() {
+  const result = await postJson('/api/link-partner', {
+    auth: state.auth,
+    partnerCode: state.partnerCode
+  })
+  state.data = result.state
+  state.partnerCode = ''
+  state.error = ''
 }
 
 async function refresh() {
@@ -173,12 +182,12 @@ function renderAuth() {
     <main class="shell">
       <section class="hero-grid">
         <section class="card hero-card">
-          <div class="eyebrow">Private Mini App</div>
+          <div class="eyebrow">Мини-приложение</div>
           <h1>Для двоих</h1>
-          <p class="lede">Пространство только для двоих: ежедневные вопросы, совпадения, общая карта воспоминаний и месячные итоги.</p>
+          <p class="lede">Ежедневные вопросы, совпадения, воспоминания и итоги месяца — только для вас двоих.</p>
           <div class="hero-pills">
             <span class="pill">${inTelegram ? 'Telegram готов' : 'Локальный режим'}</span>
-            <span class="pill">${state.health?.approvedUsers || 0}/2 участников</span>
+            <span class="pill">${state.health?.users || 0} пользователей</span>
             <span class="pill">${state.health?.timeZone || 'Europe/Moscow'}</span>
           </div>
         </section>
@@ -192,7 +201,7 @@ function renderAuth() {
                 <button class="button button-primary" data-action="telegram-enter">Продолжить через Telegram</button>
               `
               : `
-                <div class="eyebrow">Dev Mode</div>
+                <div class="eyebrow">Локальный режим</div>
                 <h2>Локальный вход</h2>
                 <form id="dev-form" class="stack-form">
                   <label class="field">
@@ -211,29 +220,7 @@ function renderAuth() {
 }
 
 function renderCodeGate() {
-  app.innerHTML = `
-    <main class="shell">
-      <section class="hero-grid">
-        <section class="card hero-card">
-          <div class="eyebrow">Доступ</div>
-          <h1>Только для вас двоих</h1>
-          <p class="lede">Код доступа вводится один раз для Telegram-профиля. После подтверждения вход больше его не требует. После двух привязок другие пользователи не смогут войти.</p>
-        </section>
-        <section class="card">
-          <div class="eyebrow">Введите код</div>
-          <h2>Подтвердить профиль</h2>
-          <form id="access-form" class="stack-form">
-            <label class="field">
-              <span>Код доступа</span>
-              <input id="accessCode" name="accessCode" maxlength="40" value="${escapeHtml(state.accessCode)}" placeholder="Введите код" />
-            </label>
-            <button class="button button-primary" type="submit">Открыть приложение</button>
-          </form>
-        </section>
-      </section>
-      ${renderError()}
-    </main>
-  `
+  renderAuth()
 }
 
 function renderHeader() {
@@ -274,6 +261,7 @@ function renderTabs() {
   const tabs = [
     ['today', 'Сегодня'],
     ['match', 'Совпадения'],
+    ['shop', 'Магазин'],
     ['memories', 'Воспоминания'],
     ['month', 'Месяц']
   ]
@@ -524,34 +512,105 @@ function renderMatch() {
   `
 }
 
-function pinPoint(longitude, latitude) {
-  return {
-    x: ((longitude + 180) / 360) * 1000,
-    y: ((90 - latitude) / 180) * 500
-  }
-}
-
-function mapSvg() {
-  const pins = state.data?.mapPins || []
+function renderPairing() {
+  const paired = Boolean(state.data?.pairing?.coupled)
+  const code = state.data?.pairing?.code || ''
+  const partner = state.data?.partner
 
   return `
-    <svg class="world-map" viewBox="0 0 1000 500" aria-label="Карта мира">
-      <rect width="1000" height="500" rx="32" fill="#17324a"></rect>
-      <g fill="#8ac4a3" opacity="0.85">
-        <path d="M108 146c57-38 142-45 196-15 39 22 79 17 103 40 22 22 16 67-21 90-30 18-34 40-69 53-56 21-137 15-190-16-58-34-78-112-19-152z"></path>
-        <path d="M355 249c32-15 78-18 114 5 24 15 39 42 60 61 27 22 71 30 74 59 2 31-43 41-84 40-58-2-105-19-129-58-20-31-50-76-35-107z"></path>
-        <path d="M554 118c57-35 136-39 202-15 39 15 88 8 112 45 18 26-6 62-39 81-37 21-55 47-91 59-73 24-176 11-223-34-31-30-15-107 39-136z"></path>
-        <path d="M734 298c28-10 58-10 84 4 26 13 41 36 59 57 22 22 58 34 58 58 0 28-40 43-81 43-61 0-109-18-127-56-17-33-27-90 7-106z"></path>
-      </g>
-      ${pins
-        .map((pin) => {
-          const point = pinPoint(pin.longitude, pin.latitude)
-          return `<circle cx="${point.x}" cy="${point.y}" r="10" fill="#ffb17a"><title>${escapeHtml(pin.title || pin.locationName || 'Точка')}</title></circle>`
-        })
-        .join('')}
-    </svg>
+    <section class="content-grid">
+      <div class="main-stack">
+        <section class="card hero-card">
+          <div class="eyebrow">Связать аккаунты</div>
+          <h2>${paired ? 'Вы уже вместе' : 'Найдите друг друга'}</h2>
+          <p class="lede">У каждого пользователя есть свой код. Обменяйтесь кодами и свяжитесь один раз — потом вход будет автоматическим.</p>
+          <div class="split-grid">
+            <section class="card compact-card">
+              <div class="eyebrow">Ваш код</div>
+              <div class="big-code">${escapeHtml(code || '—')}</div>
+              <button class="button button-ghost" type="button" data-action="copy-code" ${code ? '' : 'disabled'}>
+                Скопировать
+              </button>
+            </section>
+            <section class="card compact-card">
+              <div class="eyebrow">Код партнёра</div>
+              ${
+                paired
+                  ? `<div class="mini-note">Партнёр: <strong>${escapeHtml(partner?.name || '—')}</strong></div>`
+                  : `
+                    <form id="partner-form" class="stack-form">
+                      <label class="field">
+                        <span>Введите код</span>
+                        <input id="partnerCode" name="partnerCode" maxlength="40" value="${escapeHtml(state.partnerCode)}" placeholder="Например, K8Q2ZP" />
+                      </label>
+                      <button class="button button-primary" type="submit">Связать</button>
+                    </form>
+                  `
+              }
+            </section>
+          </div>
+          <div class="mini-note">18+: в магазине есть интимные действия. Пользуйтесь только по взаимному согласию.</div>
+        </section>
+      </div>
+      <div class="side-stack">
+        ${renderWallet()}
+      </div>
+    </section>
   `
 }
+
+function shopItems() {
+  return [
+    { title: 'Завтрак в постель', price: 35, note: 'Домашняя забота и утро без спешки.' },
+    { title: 'Кофе, приготовленный партнёром', price: 15, note: 'Маленький ритуал внимания.' },
+    { title: 'Массаж 20 минут', price: 40, note: 'Спина/шея/плечи — на выбор.' },
+    { title: 'Минет (по согласию)', price: 120, note: '18+ и только если обоим комфортно.' },
+    { title: 'Куни (по согласию)', price: 120, note: '18+ и только если обоим комфортно.' }
+  ]
+}
+
+function renderShop() {
+  const items = shopItems()
+  return `
+    <section class="content-grid">
+      <div class="main-stack">
+        <section class="card hero-card">
+          <div class="eyebrow">Магазин</div>
+          <h2>Тратьте искры на приятные вещи</h2>
+          <p class="lede">Искры можно заработать за совпадения в ответах и за воспоминания. Покупки — это идеи и договорённости для вас двоих.</p>
+        </section>
+        <section class="card">
+          <div class="eyebrow">Позиции</div>
+          <div class="shop-grid">
+            ${items
+              .map(
+                (item) => `
+                  <article class="shop-item">
+                    <div>
+                      <strong>${escapeHtml(item.title)}</strong>
+                      <div class="mini-note">${escapeHtml(item.note)}</div>
+                    </div>
+                    <div class="shop-actions">
+                      <span class="badge badge-coin">${item.price} искр</span>
+                      <button class="button button-primary" type="button" data-action="buy" data-title="${escapeHtml(item.title)}" data-price="${item.price}">
+                        Купить
+                      </button>
+                    </div>
+                  </article>
+                `
+              )
+              .join('')}
+          </div>
+        </section>
+      </div>
+      <div class="side-stack">
+        ${renderWallet()}
+      </div>
+    </section>
+  `
+}
+
+// карта мира удалена
 
 function renderMemories() {
   const memories = state.data?.memories || []
@@ -560,10 +619,9 @@ function renderMemories() {
     <section class="content-grid">
       <div class="main-stack">
         <section class="card hero-card">
-          <div class="eyebrow">Карта воспоминаний</div>
-          <h2>Ваши места и истории</h2>
-          <p class="lede">Можно добавлять фото, блоговые заметки и координаты, чтобы на карте мира появились ваши пины.</p>
-          ${mapSvg()}
+          <div class="eyebrow">Воспоминания</div>
+          <h2>Ваши фото и истории</h2>
+          <p class="lede">Добавляйте записи и фото, чтобы сохранять моменты. За каждое воспоминание начисляются искры.</p>
         </section>
         <section class="card">
           <div class="eyebrow">Новая запись</div>
@@ -581,16 +639,6 @@ function renderMemories() {
               <span>Локация</span>
               <input name="locationName" maxlength="120" placeholder="Город или название места" />
             </label>
-            <div class="split-grid">
-              <label class="field">
-                <span>Широта</span>
-                <input name="latitude" placeholder="55.7558" />
-              </label>
-              <label class="field">
-                <span>Долгота</span>
-                <input name="longitude" placeholder="37.6173" />
-              </label>
-            </div>
             <label class="field">
               <span>Фото</span>
               <input id="memoryImage" type="file" accept="image/*" />
@@ -620,7 +668,7 @@ function renderMemories() {
                     `
                   )
                   .join('')
-              : '<div class="card"><div class="empty">Здесь появятся ваши записи, фото и точки на карте.</div></div>'
+              : '<div class="card"><div class="empty">Здесь появятся ваши записи и фото.</div></div>'
           }
         </section>
       </div>
@@ -629,9 +677,8 @@ function renderMemories() {
           <div class="eyebrow">Зачем это</div>
           <h2>Механика валюты</h2>
           <ul class="plain-list">
-            <li>Каждая новая запись в воспоминаниях даёт валюту.</li>
-            <li>Эту валюту можно тратить на пропущенные вопросы прошлых дней.</li>
-            <li>Если координаты не нужны, можно оставить запись просто как блог.</li>
+            <li>Искры можно заработать за совпадения в ответах и за воспоминания.</li>
+            <li>Искры можно тратить на пропущенные вопросы и покупки в магазине.</li>
           </ul>
         </section>
         ${renderWallet()}
@@ -648,7 +695,7 @@ function monthCard(item, current = false) {
           <div class="eyebrow">${current ? 'Текущий месяц' : 'Итоги'}</div>
           <h3>${escapeHtml(item.label)}</h3>
         </div>
-        ${item.averageMatch === null ? '' : `<span class="badge badge-accent">${item.averageMatch}% match</span>`}
+        ${item.averageMatch === null ? '' : `<span class="badge badge-accent">${item.averageMatch}% совпадений</span>`}
       </div>
       <div class="stat-grid">
         <div><span>Ваши daily</span><strong>${item.myDaily}</strong></div>
@@ -703,10 +750,16 @@ function renderMonth() {
 function renderApp() {
   let content = ''
 
-  if (state.activeTab === 'today') content = renderToday()
-  if (state.activeTab === 'match') content = renderMatch()
-  if (state.activeTab === 'memories') content = renderMemories()
-  if (state.activeTab === 'month') content = renderMonth()
+  const paired = Boolean(state.data?.pairing?.coupled)
+  if (!paired) {
+    content = renderPairing()
+  } else {
+    if (state.activeTab === 'today') content = renderToday()
+    if (state.activeTab === 'match') content = renderMatch()
+    if (state.activeTab === 'shop') content = renderShop()
+    if (state.activeTab === 'memories') content = renderMemories()
+    if (state.activeTab === 'month') content = renderMonth()
+  }
 
   app.innerHTML = `
     <main class="shell">
@@ -724,10 +777,8 @@ function render() {
     return
   }
 
-  if (state.requiresCode) {
-    renderCodeGate()
-    return
-  }
+  // legacy gate removed
+  if (state.requiresCode) state.requiresCode = false
 
   if (!state.data) {
     renderAuth()
@@ -783,12 +834,11 @@ document.addEventListener('submit', async (event) => {
       return
     }
 
-    if (event.target.id === 'access-form') {
+    if (event.target.id === 'partner-form') {
       event.preventDefault()
-      const accessCode = String(new FormData(event.target).get('accessCode') || '')
-      state.accessCode = accessCode
-      await bootstrap(accessCode)
-      startRefreshLoop()
+      const partnerCode = String(new FormData(event.target).get('partnerCode') || '')
+      state.partnerCode = partnerCode
+      await linkPartner()
       render()
       return
     }
@@ -827,8 +877,6 @@ document.addEventListener('submit', async (event) => {
         title: formData.get('title'),
         text: formData.get('text'),
         locationName: formData.get('locationName'),
-        latitude: formData.get('latitude'),
-        longitude: formData.get('longitude'),
         imageDataUrl: state.memoryImageDataUrl
       })
 
@@ -877,6 +925,29 @@ document.addEventListener('click', async (event) => {
       await bootstrap()
       startRefreshLoop()
       render()
+      return
+    }
+
+    if (action.dataset.action === 'copy-code') {
+      const code = state.data?.pairing?.code
+      if (code) {
+        await navigator.clipboard.writeText(code)
+        state.error = 'Код скопирован.'
+        render()
+      }
+      return
+    }
+
+    if (action.dataset.action === 'buy') {
+      const item = {
+        title: action.dataset.title,
+        price: Number(action.dataset.price || 0)
+      }
+      const result = await postJson('/api/purchase', { auth: state.auth, item })
+      state.data = result.state
+      state.error = ''
+      render()
+      return
     }
   } catch (error) {
     state.error = error.message || 'Не удалось войти.'
@@ -888,8 +959,8 @@ document.addEventListener('input', (event) => {
   if (event.target.id === 'devName') {
     state.devName = event.target.value.slice(0, 40)
   }
-  if (event.target.id === 'accessCode') {
-    state.accessCode = event.target.value.slice(0, 12)
+  if (event.target.id === 'partnerCode') {
+    state.partnerCode = event.target.value.slice(0, 40)
   }
 })
 

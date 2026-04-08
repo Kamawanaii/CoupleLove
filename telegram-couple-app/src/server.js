@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { config } from './config.js'
-import { addMemory, getHealth, openSession, submitDailyAnswer, submitMatchAnswer } from './storage.js'
+import { addMemory, getHealth, linkPartner, openSession, purchase, submitDailyAnswer, submitMatchAnswer } from './storage.js'
 import { resolveUserFromAuth } from './telegram.js'
 import { startTelegramBot } from './telegramBot.js'
 
@@ -88,8 +88,15 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === 'POST' && url.pathname === '/api/bootstrap') {
       const body = await parseBody(request)
-      const result = openSession(currentUser(body), body.accessCode)
+      const result = openSession(currentUser(body))
       sendJson(response, 200, result)
+      return
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/link-partner') {
+      const body = await parseBody(request)
+      const state = linkPartner(currentUser(body).id, body.partnerCode)
+      sendJson(response, 200, { ok: true, state })
       return
     }
 
@@ -110,6 +117,13 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/api/memory') {
       const body = await parseBody(request)
       const state = addMemory(currentUser(body).id, body)
+      sendJson(response, 200, { ok: true, state })
+      return
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/purchase') {
+      const body = await parseBody(request)
+      const state = purchase(currentUser(body).id, body.item)
       sendJson(response, 200, { ok: true, state })
       return
     }
