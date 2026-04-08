@@ -11,6 +11,7 @@ const state = {
   devName: localStorage.getItem('couple-dev-name') || '',
   activeTab: 'today',
   activeTopicId: 'feelings',
+  showArchive: false,
   memoryImageDataUrl: '',
   memoryImageName: '',
   refreshTimer: null
@@ -118,6 +119,7 @@ async function bootstrap(accessCode = '') {
   state.requiresCode = Boolean(data.requiresCode)
   state.data = data.state || null
   state.error = ''
+  state.showArchive = false
 
   if (state.data?.match?.topics?.length) {
     const valid = state.data.match.topics.find((topic) => topic.id === state.activeTopicId)
@@ -380,11 +382,22 @@ function renderToday() {
               <div class="eyebrow">Архив</div>
               <h2>Прошлые вопросы</h2>
             </div>
-            <span class="badge badge-soft">Возврат за искры</span>
+            <div class="badge-row">
+              <span class="badge badge-soft">Возврат за искры</span>
+              <button class="button button-ghost" type="button" data-action="toggle-archive">
+                ${state.showArchive ? 'Скрыть' : 'Открыть'}
+              </button>
+            </div>
           </div>
-          <div class="archive-list">
-            ${archive.map((item) => dailyCard(item)).join('')}
-          </div>
+          ${
+            state.showArchive
+              ? `
+                <div class="archive-list">
+                  ${archive.length ? archive.map((item) => dailyCard(item)).join('') : '<div class="empty">Пока нет прошлых вопросов.</div>'}
+                </div>
+              `
+              : '<div class="mini-note">Прошлые вопросы спрятаны — откройте их кнопкой, когда понадобится.</div>'
+          }
         </section>
       </div>
       <div class="side-stack">
@@ -853,6 +866,12 @@ document.addEventListener('click', async (event) => {
   }
 
   try {
+    if (action.dataset.action === 'toggle-archive') {
+      state.showArchive = !state.showArchive
+      render()
+      return
+    }
+
     if (action.dataset.action === 'telegram-enter') {
       state.auth = telegramAuth()
       await bootstrap()

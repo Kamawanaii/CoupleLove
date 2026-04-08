@@ -290,6 +290,15 @@ h3 {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
 }
 
+.button-ghost {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(216, 79, 139, 0.16);
+  color: #7b3158;
+}
+
 .member-chip,
 .wallet-row,
 .answer-block,

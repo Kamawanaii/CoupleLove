@@ -323,10 +323,17 @@ function oneDailyCard(data, userId, dateKey) {
 
 function dailyFeed(data, userId) {
   const today = getCurrentDateKey()
+  const approvedFrom = data.access.approvedUsers[userId]?.approvedDateKey || today
   const cards = []
 
-  for (let index = 0; index < APP_CONFIG.backlogDays; index += 1) {
-    cards.push(oneDailyCard(data, userId, shiftDateKey(today, -index)))
+  let index = 0
+  while (index < APP_CONFIG.backlogDays) {
+    const dateKey = shiftDateKey(today, -index)
+    cards.push(oneDailyCard(data, userId, dateKey))
+    if (compareDateKeys(dateKey, approvedFrom) === 0) {
+      break
+    }
+    index += 1
   }
 
   return cards
@@ -554,6 +561,7 @@ export function openSession(user, accessCode = '') {
       username: user.username || '',
       avatarUrl: user.avatarUrl || '',
       approvedAt: Date.now(),
+      approvedDateKey: getCurrentDateKey(),
       lastSeenAt: Date.now()
     }
     ensureWallet(data, user.id)
